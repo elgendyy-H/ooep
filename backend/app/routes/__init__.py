@@ -1,0 +1,10 @@
+from .auth import router as auth
+from .scans import router as scans
+from .targets import router as targets
+from .findings import router as findings
+from .reports import router as reports
+from .automation import router as automation
+from .compliance import router as compliance
+from .integrations import router as integrations
+from .monitoring import router as monitoring
+from .users import router as users
