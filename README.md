@@ -19,7 +19,7 @@
 
 #### Docker (Recommended)
 ```bash
-git clone https://github.com/your-repo/oepp-platform.git
+git clone https://github.com/elgendyy-H/ooep.git
 cd oepp-platform
 chmod +x install.sh
 ./install.sh
