@@ -1,0 +1,278 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oepp}
+      POSTGRES_USER: ${POSTGRES_USER:-oepp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgresql/init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - oepp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oepp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      sh -c "redis-server --requirepass $${REDIS_PASSWORD:?REDIS_PASSWORD is required} --maxmemory 256mb --maxmemory-policy allkeys-lru"
+    volumes:
+      - redis_data:/data
+    networks:
+      - oepp-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "$${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oepp}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-oepp}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://oepp.example.com,http://localhost:3000}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-oepp.example.com,localhost}
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+      - /tmp:/tmp:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - oepp-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: ${API_BASE_URL:-https://oepp.example.com/api}
+      REACT_APP_WS_URL: ${WS_BASE_URL:-wss://oepp.example.com/ws}
+      NODE_ENV: ${NODE_ENV:-production}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - oepp-network
+    command: npm start
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oepp}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-oepp}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - oepp-network
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  beat:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oepp}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-oepp}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    depends_on:
+      - worker
+      - redis
+    networks:
+      - oepp-network
+    command: celery -A app.celery_app beat --loglevel=info
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+      - ./data/certbot/www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - oepp-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    depends_on:
+      - nginx
+    networks:
+      - oepp-network
+    command: certonly --webroot -w /var/www/certbot --force-renewal --email ${SSL_EMAIL} -d ${DOMAIN} --agree-tos
+    restart: on-failure
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - oepp-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required}
+      GF_SERVER_DOMAIN: ${DOMAIN}
+      GF_SERVER_ROOT_URL: https://${DOMAIN}/grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      - oepp-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - oepp-network
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - oepp-network
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.10.0
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+      SERVER_NAME: kibana
+    depends_on:
+      - elasticsearch
+    networks:
+      - oepp-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  backup:
+    image: offen/docker-volume-backup:latest
+    restart: unless-stopped
+    environment:
+      BACKUP_CRON_EXPRESSION: "0 2 * * *"
+      BACKUP_RETENTION_DAYS: 7
+      BACKUP_PRUNING_PREFIX: backup-
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-}
+    volumes:
+      - postgres_data:/backup/postgres:ro
+      - redis_data:/backup/redis:ro
+      - ./data/backups:/archive
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - oepp-network
+
+networks:
+  oepp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:

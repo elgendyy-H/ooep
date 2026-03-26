@@ -1,0 +1,17 @@
+[
+  {
+    "id": "PCI-1",
+    "name": "Install and maintain firewall configuration",
+    "description": "Firewalls must protect cardholder data."
+  },
+  {
+    "id": "PCI-2",
+    "name": "Secure passwords and authentication",
+    "description": "Do not use vendor-supplied defaults."
+  },
+  {
+    "id": "PCI-3",
+    "name": "Protect stored cardholder data",
+    "description": "Encrypt transmission of cardholder data across open, public networks."
+  }
+]

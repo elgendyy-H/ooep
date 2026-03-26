@@ -1,0 +1,50 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: oepp
+spec:
+  selector:
+    app: oepp
+    component: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: oepp
+spec:
+  selector:
+    app: oepp
+    component: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: oepp
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: oepp
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "GDPR-1",
+    "name": "Lawful basis for processing",
+    "description": "Ensure a lawful basis is documented for each processing activity."
+  },
+  {
+    "id": "GDPR-2",
+    "name": "Data subject rights",
+    "description": "Mechanisms for access, rectification, erasure, and portability."
+  },
+  {
+    "id": "GDPR-3",
+    "name": "Data protection by design",
+    "description": "Implement appropriate technical and organisational measures."
+  }
+]

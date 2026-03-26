@@ -1,0 +1,40 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oepp-beat
+  namespace: oepp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oepp
+      component: beat
+  template:
+    metadata:
+      labels:
+        app: oepp
+        component: beat
+    spec:
+      containers:
+      - name: beat
+        image: oepp/backend:latest
+        command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=info"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: oepp-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: oepp-secrets
+              key: redis-url
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

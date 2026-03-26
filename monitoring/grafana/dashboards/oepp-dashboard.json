@@ -1,0 +1,47 @@
+{
+  "title": "OEPP Platform Monitoring",
+  "uid": "oepp-dashboard",
+  "panels": [
+    {
+      "title": "API Request Rate",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(http_requests_total[5m])", "legendFormat": "{{status}}"}]
+    },
+    {
+      "title": "API Latency (95th percentile)",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))"}]
+    },
+    {
+      "title": "Celery Queue Length",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "celery_queue_length", "legendFormat": "{{queue}}"}]
+    },
+    {
+      "title": "Database Connections",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "pg_stat_database_numbackends", "legendFormat": "{{datname}}"}]
+    },
+    {
+      "title": "Container Memory Usage",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [{"expr": "container_memory_usage_bytes / container_spec_memory_limit_bytes * 100", "legendFormat": "{{container}}"}]
+    },
+    {
+      "title": "Container CPU Usage",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [{"expr": "rate(container_cpu_usage_seconds_total[5m]) * 100", "legendFormat": "{{container}}"}]
+    },
+    {
+      "title": "Recent Alerts",
+      "type": "alertlist",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8}
+    }
+  ]
+}

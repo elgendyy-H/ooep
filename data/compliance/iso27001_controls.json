@@ -1,0 +1,17 @@
+[
+  {
+    "id": "A.5.1.1",
+    "name": "Information security policy",
+    "description": "Policies for information security should be defined and approved by management."
+  },
+  {
+    "id": "A.5.1.2",
+    "name": "Review of the information security policy",
+    "description": "The policy should be reviewed at planned intervals."
+  },
+  {
+    "id": "A.6.1.1",
+    "name": "Information security roles and responsibilities",
+    "description": "Define and allocate information security responsibilities."
+  }
+]
